@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digits of Pi</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #1a1a2e;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: #1a1a2e;
+      width: 100%;
+      padding: 16px 0 12px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .subtitle { font-size: 0.85rem; color: #888; margin-bottom: 10px; }
+    #legend {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 0 8px;
+    }
+    #size-control {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: #888;
+    }
+    #size-control input[type="range"] {
+      width: 120px;
+      accent-color: #76b7b2;
+    }
+    #size-label {
+      min-width: 36px;
+      text-align: right;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.8rem;
+    }
+    .legend-swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 2px;
+    }
+    main {
+      padding: 20px 0 40px;
+      display: flex;
+      justify-content: center;
+    }
+    canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    #tooltip {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-family: monospace;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Digits of Pi</h1>
+    <p class="subtitle"></p>
+    <div id="legend"></div>
+    <div id="size-control">
+      <span>Square size:</span>
+      <input type="range" id="size-slider" min="1" max="20" value="4">
+      <span id="size-label">4px</span>
+      <span style="margin-left: 16px;">Columns:</span>
+      <input type="range" id="cols-slider" min="5" max="100" value="10">
+      <span id="cols-label">10</span>
+    </div>
+  </header>
+  <main>
+    <canvas id="pi-canvas"></canvas>
+  </main>
+  <div id="tooltip"></div>
+  <script>
+    // URL to fetch pi digits from (plain text, digits only or with non-digit chars stripped)
+    const PI_DIGITS_URL = "PASTE_URL_HERE";
+
+    const COLORS = [
+      '#4e79a7', // 0 - steel blue
+      '#f28e2b', // 1 - orange
+      '#e15759', // 2 - red-coral
+      '#76b7b2', // 3 - teal
+      '#59a14f', // 4 - green
+      '#edc948', // 5 - gold
+      '#b07aa1', // 6 - purple
+      '#ff9da7', // 7 - pink
+      '#9c755f', // 8 - brown
+      '#bab0ac', // 9 - warm gray
+    ];
+
+    let cell = 4;
+    let cols = 10;
+    let digits = '';
+
+    const subtitle = document.querySelector('.subtitle');
+    const canvas = document.getElementById('pi-canvas');
+    const ctx = canvas.getContext('2d');
+    const tooltip = document.getElementById('tooltip');
+
+    // Build legend
+    const legend = document.getElementById('legend');
+    COLORS.forEach((color, i) => {
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML = `<div class="legend-swatch" style="background:${color}"></div>${i}`;
+      legend.appendChild(item);
+    });
+
+    function render() {
+      if (!digits.length) return;
+      const rows = Math.ceil(digits.length / cols);
+      canvas.width = cols * cell;
+      canvas.height = rows * cell;
+      canvas.style.width = `${cols * cell}px`;
+      for (let i = 0; i < digits.length; i++) {
+        ctx.fillStyle = COLORS[+digits[i]];
+        ctx.fillRect((i % cols) * cell, Math.floor(i / cols) * cell, cell, cell);
+      }
+    }
+
+    // Fetch digits
+    subtitle.textContent = 'Loading digits...';
+    fetch(PI_DIGITS_URL)
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(text => {
+        digits = text.replace(/[^0-9]/g, '');
+        subtitle.textContent = `${digits.length.toLocaleString()} digits visualized as colored squares`;
+        render();
+      })
+      .catch(err => { subtitle.textContent = `Failed to load digits: ${err.message}`; });
+
+    // Sliders
+    const slider = document.getElementById('size-slider');
+    const sizeLabel = document.getElementById('size-label');
+    slider.addEventListener('input', (e) => {
+      cell = +e.target.value;
+      sizeLabel.textContent = `${cell}px`;
+      render();
+    });
+
+    const colsSlider = document.getElementById('cols-slider');
+    const colsLabel = document.getElementById('cols-label');
+    colsSlider.addEventListener('input', (e) => {
+      cols = +e.target.value;
+      colsLabel.textContent = cols;
+      render();
+    });
+
+    // Hover tooltip
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const cx = Math.floor((e.clientX - rect.left) * scaleX / cell);
+      const cy = Math.floor((e.clientY - rect.top) * scaleY / cell);
+      const idx = cy * cols + cx;
+      if (idx >= 0 && idx < digits.length && cx >= 0 && cx < cols) {
+        tooltip.textContent = `Position ${idx.toLocaleString()}: digit ${digits[idx]}`;
+        tooltip.style.opacity = '1';
+      } else {
+        tooltip.style.opacity = '0';
+      }
+    });
+    canvas.addEventListener('mouseleave', () => {
+      tooltip.style.opacity = '0';
+    });
+  </script>
+</body>
+</html>
