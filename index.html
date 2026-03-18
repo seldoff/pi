@@ -147,6 +147,7 @@
       <input type="range" id="cols-slider" min="5" max="100" value="100">
       <span id="cols-label">100</span>
       <span style="margin-left: 16px;"><button id="mode-toggle" class="ctrl-btn">Gradient</button></span>
+      <button id="randomize-btn" class="ctrl-btn">Randomize</button>
     </div>
     <div class="controls" id="gradient-controls">
       <span>From:</span>
@@ -154,7 +155,6 @@
       <span style="margin-left: 8px;">To:</span>
       <input type="color" id="color-to" value="#f0e830">
       <button id="invert-btn" style="margin-left: 8px;" class="ctrl-btn">Invert</button>
-      <button id="randomize-btn" class="ctrl-btn">Randomize</button>
     </div>
   </header>
   <div id="scroll-spacer">
@@ -167,7 +167,7 @@
     // URL to fetch pi digits from (plain text, digits only or with non-digit chars stripped)
     const PI_DIGITS_URL = "https://raw.githubusercontent.com/seldoff/pi/refs/heads/main/pi.txt";
 
-    const COLORS = [
+    let COLORS = [
       '#4e79a7', // 0 - steel blue
       '#f28e2b', // 1 - orange
       '#e15759', // 2 - red-coral
@@ -255,18 +255,25 @@
       bctx.fillStyle = grad;
       bctx.fillRect(0, 0, bar.width, bar.height);
     }
+    function randomHex() {
+      return '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
+    }
     function getColor(digit) {
       return gradientMode ? gradientColors[digit] : COLORS[digit];
     }
 
     // Build legend
     const legend = document.getElementById('legend');
-    COLORS.forEach((color, i) => {
-      const item = document.createElement('div');
-      item.className = 'legend-item';
-      item.innerHTML = `<div class="legend-swatch" style="background:${color}"></div>${i}`;
-      legend.appendChild(item);
-    });
+    function buildLegend() {
+      legend.innerHTML = '';
+      COLORS.forEach((color, i) => {
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        item.innerHTML = `<div class="legend-swatch" style="background:${color}"></div>${i}`;
+        legend.appendChild(item);
+      });
+    }
+    buildLegend();
     computeGradientColors();
 
     function totalRows() { return Math.ceil(digits.length / cols); }
@@ -361,6 +368,8 @@
     const modeToggle = document.getElementById('mode-toggle');
     const gradientControlsEl = document.getElementById('gradient-controls');
     const gradientLegendEl = document.getElementById('gradient-legend');
+    const colorFrom = document.getElementById('color-from');
+    const colorTo = document.getElementById('color-to');
     modeToggle.addEventListener('click', () => {
       gradientMode = !gradientMode;
       modeToggle.textContent = gradientMode ? 'Categorical' : 'Gradient';
@@ -369,14 +378,22 @@
       legend.style.display = gradientMode ? 'none' : 'flex';
       updateLayout();
     });
-    const colorFrom = document.getElementById('color-from');
-    const colorTo = document.getElementById('color-to');
+
+    // Randomize (works for both modes)
+    document.getElementById('randomize-btn').addEventListener('click', () => {
+      if (gradientMode) {
+        colorFrom.value = randomHex();
+        colorTo.value = randomHex();
+        computeGradientColors();
+      } else {
+        COLORS = Array.from({length: 10}, () => randomHex());
+        buildLegend();
+      }
+      scheduleRender();
+    });
     colorFrom.addEventListener('input', () => { computeGradientColors(); scheduleRender(); });
     colorTo.addEventListener('input', () => { computeGradientColors(); scheduleRender(); });
 
-    function randomHex() {
-      return '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
-    }
     document.getElementById('invert-btn').addEventListener('click', () => {
       const tmp = colorFrom.value;
       colorFrom.value = colorTo.value;
@@ -384,13 +401,6 @@
       computeGradientColors();
       scheduleRender();
     });
-    document.getElementById('randomize-btn').addEventListener('click', () => {
-      colorFrom.value = randomHex();
-      colorTo.value = randomHex();
-      computeGradientColors();
-      scheduleRender();
-    });
-
     // Hover tooltip
     canvas.addEventListener('mousemove', (e) => {
       const rect = canvas.getBoundingClientRect();
