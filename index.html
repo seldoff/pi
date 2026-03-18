@@ -25,6 +25,28 @@
       box-shadow: 0 2px 8px rgba(0,0,0,0.5);
     }
     h1 { font-size: 1.4rem; margin-bottom: 10px; }
+    #collapse-toggle {
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      background: #333;
+      color: #ccc;
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 2px 8px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      line-height: 1.2;
+      z-index: 11;
+    }
+    #collapse-toggle:hover { background: #444; }
+    header.collapsed { padding: 10px 0; }
+    header.collapsed #legend,
+    header.collapsed #gradient-legend,
+    header.collapsed .controls {
+      display: none !important;
+    }
+    header.collapsed h1 { margin-bottom: 0; }
     #legend {
       display: flex;
       justify-content: center;
@@ -174,6 +196,7 @@
 </head>
 <body>
   <header>
+    <button id="collapse-toggle" title="Collapse panel (H)">&#9650;</button>
     <h1 id="title">digits of Pi</h1>
     <div id="legend"></div>
     <div id="gradient-legend"><span>0</span><canvas id="gradient-bar" width="200" height="16"></canvas><span>9</span></div>
@@ -254,6 +277,18 @@
     const ctx = canvas.getContext('2d');
     const tooltip = document.getElementById('tooltip');
     const headerEl = document.querySelector('header');
+
+    // Collapse toggle
+    const collapseToggle = document.getElementById('collapse-toggle');
+    let headerCollapsed = false;
+    function toggleHeader(force) {
+      headerCollapsed = force !== undefined ? force : !headerCollapsed;
+      headerEl.classList.toggle('collapsed', headerCollapsed);
+      collapseToggle.innerHTML = headerCollapsed ? '&#9660;' : '&#9650;';
+      collapseToggle.title = headerCollapsed ? 'Expand panel (H)' : 'Collapse panel (H)';
+      updateLayout();
+    }
+    collapseToggle.addEventListener('click', () => toggleHeader());
 
     // Color helpers (OKLab interpolation for perceptually uniform gradients)
     function hexToLinear(hex) {
@@ -603,8 +638,14 @@
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
+        if (headerCollapsed) toggleHeader(false);
         searchInput.focus();
         searchInput.select();
+      }
+      if (e.key === 'h' && !e.ctrlKey && !e.metaKey && !e.altKey
+          && document.activeElement.tagName !== 'INPUT'
+          && document.activeElement.tagName !== 'SELECT') {
+        toggleHeader();
       }
     });
 
