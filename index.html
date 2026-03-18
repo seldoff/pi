@@ -92,6 +92,7 @@
       font-size: 0.8rem;
       font-family: monospace;
       pointer-events: none;
+      z-index: 5;
       opacity: 0;
       transition: opacity 0.15s;
     }
@@ -161,7 +162,7 @@
 
     function updateLayout() {
       if (!digits.length) return;
-      const fullHeight = totalRows() * cell + headerH();
+      const fullHeight = totalRows() * cell + headerH() + cell;
       scrollSpacer.style.height = `${fullHeight}px`;
       canvasWrap.style.paddingTop = `${headerH()}px`;
       const viewH = window.innerHeight - headerH();
@@ -257,7 +258,7 @@
       const idx = absRow * cols + cx;
 
       if (idx >= 0 && idx < digits.length && cx >= 0 && cx < cols) {
-        tooltip.textContent = `Position ${idx.toLocaleString()}: digit ${digits[idx]}`;
+        tooltip.textContent = `Position ${(idx + 1).toLocaleString()}: digit ${digits[idx]}`;
         tooltip.style.opacity = '1';
       } else {
         tooltip.style.opacity = '0';
