@@ -24,8 +24,7 @@
       text-align: center;
       box-shadow: 0 2px 8px rgba(0,0,0,0.5);
     }
-    h1 { font-size: 1.4rem; margin-bottom: 4px; }
-    h1 { margin-bottom: 10px; }
+    h1 { font-size: 1.4rem; margin-bottom: 10px; }
     #legend {
       display: flex;
       justify-content: center;
@@ -139,6 +138,18 @@
       z-index: 5;
       opacity: 0;
       transition: opacity 0.15s;
+    }
+    @media print {
+      body { background: #fff; display: block; }
+      header, #tooltip { display: none !important; }
+      #scroll-spacer { height: auto !important; }
+      #canvas-wrap {
+        position: static !important;
+        height: auto !important;
+        padding-top: 0 !important;
+        background: #fff;
+      }
+      canvas { display: block; margin: 0 auto; }
     }
   </style>
 </head>
@@ -428,6 +439,35 @@
       computeGradientColors();
       scheduleRender();
     });
+    // Print support — render full canvas before printing, restore after
+    let savedCanvasW, savedCanvasH;
+    window.addEventListener('beforeprint', () => {
+      if (!digits.length) return;
+      savedCanvasW = canvas.width;
+      savedCanvasH = canvas.height;
+      const rows = totalRows();
+      canvas.width = cols * cell;
+      canvas.height = rows * cell;
+      canvas.style.width = `${cols * cell}px`;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const idx = r * cols + c;
+          if (idx >= digits.length) break;
+          ctx.fillStyle = getColor(+digits[idx]);
+          ctx.fillRect(c * cell, r * cell, cell, cell);
+        }
+      }
+    });
+    window.addEventListener('afterprint', () => {
+      if (!digits.length) return;
+      canvas.width = savedCanvasW;
+      canvas.height = savedCanvasH;
+      canvas.style.width = `${cols * cell}px`;
+      renderVisible();
+    });
+
     // Hover tooltip
     canvas.addEventListener('mousemove', (e) => {
       const rect = canvas.getBoundingClientRect();
