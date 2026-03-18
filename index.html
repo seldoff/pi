@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Digits of Pi</title>
+  <title>digits of Pi</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -139,6 +139,25 @@
       opacity: 0;
       transition: opacity 0.15s;
     }
+    .ctrl-input {
+      background: #333;
+      color: #ccc;
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 0.8rem;
+      font-family: monospace;
+      width: 140px;
+    }
+    .ctrl-input:focus {
+      outline: none;
+      border-color: #76b7b2;
+    }
+    #search-count {
+      min-width: 60px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
     @media print {
       body { background: #fff; display: block; }
       header, #tooltip { display: none !important; }
@@ -155,7 +174,7 @@
 </head>
 <body>
   <header>
-    <h1 id="title">Digits of Pi</h1>
+    <h1 id="title">digits of Pi</h1>
     <div id="legend"></div>
     <div id="gradient-legend"><span>0</span><canvas id="gradient-bar" width="200" height="16"></canvas><span>9</span></div>
     <div class="controls">
@@ -178,6 +197,13 @@
         <option value="grayscale">Grayscale</option>
       </select>
       <button id="randomize-btn" class="ctrl-btn">Randomize</button>
+    </div>
+    <div class="controls" id="search-controls">
+      <input type="text" id="search-input" class="ctrl-input" placeholder="Search digits..." inputmode="numeric" autocomplete="off">
+      <button id="search-prev" class="ctrl-btn" title="Previous match (Shift+Enter)">&#8592;</button>
+      <button id="search-next" class="ctrl-btn" title="Next match (Enter)">&#8594;</button>
+      <span id="search-count"></span>
+      <button id="search-clear" class="ctrl-btn" title="Clear search (Escape)">&times;</button>
     </div>
     <div class="controls" id="gradient-controls">
       <span>From:</span>
@@ -214,6 +240,12 @@
     let digits = '';
     let gradientMode = false;
     let gradientColors = []; // precomputed 10 hex strings
+
+    // Search state
+    let searchQuery = '';
+    let searchResults = [];    // start indices of matches
+    let searchIndex = -1;      // current active match
+    let searchMatchSet = null; // Set of all digit positions in any match
 
     const title = document.getElementById('title');
     const scrollSpacer = document.getElementById('scroll-spacer');
@@ -340,6 +372,40 @@
           ctx.fillRect(c * cell, r * cell, cell, cell);
         }
       }
+
+      // Search highlights
+      if (searchMatchSet && searchMatchSet.size > 0) {
+        const activeStart = searchIndex >= 0 ? searchResults[searchIndex] : -1;
+        const activeEnd = activeStart >= 0 ? activeStart + searchQuery.length : -1;
+        const firstIdx = firstRow * cols;
+        const lastIdx = Math.min(digits.length, (firstRow + visibleRows) * cols);
+
+        for (let idx = firstIdx; idx < lastIdx; idx++) {
+          if (!searchMatchSet.has(idx)) continue;
+          const r = Math.floor(idx / cols) - firstRow;
+          const c = idx % cols;
+          const x = c * cell;
+          const y = r * cell;
+          const isActive = idx >= activeStart && idx < activeEnd;
+
+          if (cell <= 2) {
+            ctx.fillStyle = isActive ? '#ffe600' : 'rgba(255,255,255,0.7)';
+            ctx.fillRect(x, y, cell, cell);
+          } else {
+            if (!isActive) {
+              ctx.fillStyle = 'rgba(255,255,255,0.15)';
+              ctx.fillRect(x, y, cell, cell);
+              ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(x + 0.5, y + 0.5, cell - 1, cell - 1);
+            } else {
+              ctx.strokeStyle = '#ffe600';
+              ctx.lineWidth = 2;
+              ctx.strokeRect(x + 1, y + 1, cell - 2, cell - 2);
+            }
+          }
+        }
+      }
     }
 
     let rafId = 0;
@@ -352,16 +418,16 @@
     window.addEventListener('resize', () => { updateSliderRanges(); updateLayout(); });
 
     // Fetch digits
-    title.textContent = 'Loading Digits of Pi...';
+    title.textContent = document.title = 'Loading digits of Pi...';
     fetch(PI_DIGITS_URL)
       .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(text => {
         digits = text.replace(/[^0-9]/g, '');
-        title.textContent = `${digits.length.toLocaleString()} Digits of Pi`;
+        title.textContent = document.title = `${digits.length.toLocaleString()} digits of Pi`;
         updateSliderRanges();
         updateLayout();
       })
-      .catch(err => { title.textContent = `Failed to load digits: ${err.message}`; });
+      .catch(err => { title.textContent = document.title = `Failed to load: ${err.message}`; });
 
     // Sliders
     const slider = document.getElementById('size-slider');
@@ -439,12 +505,117 @@
       computeGradientColors();
       scheduleRender();
     });
+    // Search
+    const searchInput = document.getElementById('search-input');
+    const searchCount = document.getElementById('search-count');
+
+    function performSearch() {
+      const raw = searchInput.value.replace(/[^0-9]/g, '');
+      searchQuery = raw;
+      searchResults = [];
+      searchMatchSet = null;
+      searchIndex = -1;
+
+      if (raw.length === 0 || !digits.length) {
+        searchCount.textContent = '';
+        scheduleRender();
+        return;
+      }
+
+      // Find all occurrences
+      let pos = digits.indexOf(raw, 0);
+      while (pos !== -1) {
+        searchResults.push(pos);
+        pos = digits.indexOf(raw, pos + 1);
+      }
+
+      if (searchResults.length === 0) {
+        searchCount.textContent = '0 of 0';
+        scheduleRender();
+        return;
+      }
+
+      // Build set of all matched positions
+      searchMatchSet = new Set();
+      for (const start of searchResults) {
+        for (let i = 0; i < raw.length; i++) searchMatchSet.add(start + i);
+      }
+
+      searchIndex = 0;
+      scrollToMatch(0);
+      updateSearchCount();
+    }
+
+    function updateSearchCount() {
+      if (searchResults.length === 0) {
+        searchCount.textContent = searchQuery ? '0 of 0' : '';
+      } else {
+        searchCount.textContent = `${searchIndex + 1} of ${searchResults.length.toLocaleString()}`;
+      }
+    }
+
+    function scrollToMatch(index) {
+      searchIndex = index;
+      updateSearchCount();
+      const digitPos = searchResults[index];
+      const row = Math.floor(digitPos / cols);
+      const viewH = window.innerHeight - headerH();
+      const targetScroll = row * cell - viewH / 2 + cell / 2;
+      window.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+      scheduleRender();
+    }
+
+    function searchNext() {
+      if (searchResults.length === 0) return;
+      scrollToMatch((searchIndex + 1) % searchResults.length);
+    }
+
+    function searchPrev() {
+      if (searchResults.length === 0) return;
+      scrollToMatch((searchIndex - 1 + searchResults.length) % searchResults.length);
+    }
+
+    function clearSearch() {
+      searchInput.value = '';
+      searchQuery = '';
+      searchResults = [];
+      searchMatchSet = null;
+      searchIndex = -1;
+      searchCount.textContent = '';
+      searchInput.blur();
+      scheduleRender();
+    }
+
+    searchInput.addEventListener('input', performSearch);
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (e.shiftKey) searchPrev(); else searchNext();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        clearSearch();
+      }
+    });
+    document.getElementById('search-prev').addEventListener('click', searchPrev);
+    document.getElementById('search-next').addEventListener('click', searchNext);
+    document.getElementById('search-clear').addEventListener('click', clearSearch);
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      }
+    });
+
     // Print support — render full canvas before printing, restore after
-    let savedCanvasW, savedCanvasH;
+    let savedCanvasW, savedCanvasH, savedSearchMatchSet;
     window.addEventListener('beforeprint', () => {
       if (!digits.length) return;
       savedCanvasW = canvas.width;
       savedCanvasH = canvas.height;
+      savedSearchMatchSet = searchMatchSet;
+      searchMatchSet = null;
       const printDigits = Math.min(digits.length, 300000);
       const rows = Math.ceil(printDigits / cols);
       canvas.width = cols * cell;
@@ -466,6 +637,7 @@
       canvas.width = savedCanvasW;
       canvas.height = savedCanvasH;
       canvas.style.width = `${cols * cell}px`;
+      searchMatchSet = savedSearchMatchSet;
       renderVisible();
     });
 
