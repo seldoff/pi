@@ -15,7 +15,7 @@
       align-items: center;
     }
     header {
-      position: sticky;
+      position: fixed;
       top: 0;
       z-index: 10;
       background: #1a1a2e;
@@ -61,10 +61,20 @@
       height: 16px;
       border-radius: 2px;
     }
-    main {
-      padding: 20px 0 40px;
+    #scroll-spacer {
+      width: 100%;
+    }
+    #canvas-wrap {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
       display: flex;
       justify-content: center;
+      align-items: start;
+      background: #1a1a2e;
+      z-index: 1;
     }
     canvas {
       image-rendering: pixelated;
@@ -94,20 +104,22 @@
     <div id="legend"></div>
     <div id="size-control">
       <span>Square size:</span>
-      <input type="range" id="size-slider" min="1" max="20" value="4">
-      <span id="size-label">4px</span>
+      <input type="range" id="size-slider" min="1" max="20" value="10">
+      <span id="size-label">10px</span>
       <span style="margin-left: 16px;">Columns:</span>
-      <input type="range" id="cols-slider" min="5" max="100" value="10">
-      <span id="cols-label">10</span>
+      <input type="range" id="cols-slider" min="5" max="100" value="100">
+      <span id="cols-label">100</span>
     </div>
   </header>
-  <main>
-    <canvas id="pi-canvas"></canvas>
-  </main>
+  <div id="scroll-spacer">
+    <div id="canvas-wrap">
+      <canvas id="pi-canvas"></canvas>
+    </div>
+  </div>
   <div id="tooltip"></div>
   <script>
     // URL to fetch pi digits from (plain text, digits only or with non-digit chars stripped)
-    const PI_DIGITS_URL = "PASTE_URL_HERE";
+    const PI_DIGITS_URL = "https://raw.githubusercontent.com/seldoff/pi/refs/heads/main/pi.txt";
 
     const COLORS = [
       '#4e79a7', // 0 - steel blue
@@ -122,14 +134,17 @@
       '#bab0ac', // 9 - warm gray
     ];
 
-    let cell = 4;
-    let cols = 10;
+    let cell = 10;
+    let cols = 100;
     let digits = '';
 
     const subtitle = document.querySelector('.subtitle');
+    const scrollSpacer = document.getElementById('scroll-spacer');
+    const canvasWrap = document.getElementById('canvas-wrap');
     const canvas = document.getElementById('pi-canvas');
     const ctx = canvas.getContext('2d');
     const tooltip = document.getElementById('tooltip');
+    const headerEl = document.querySelector('header');
 
     // Build legend
     const legend = document.getElementById('legend');
@@ -140,17 +155,51 @@
       legend.appendChild(item);
     });
 
-    function render() {
+    function totalRows() { return Math.ceil(digits.length / cols); }
+
+    function headerH() { return headerEl.offsetHeight; }
+
+    function updateLayout() {
       if (!digits.length) return;
-      const rows = Math.ceil(digits.length / cols);
+      const fullHeight = totalRows() * cell + headerH();
+      scrollSpacer.style.height = `${fullHeight}px`;
+      canvasWrap.style.paddingTop = `${headerH()}px`;
+      const viewH = window.innerHeight - headerH();
       canvas.width = cols * cell;
-      canvas.height = rows * cell;
+      canvas.height = Math.ceil(viewH / cell) * cell;
       canvas.style.width = `${cols * cell}px`;
-      for (let i = 0; i < digits.length; i++) {
-        ctx.fillStyle = COLORS[+digits[i]];
-        ctx.fillRect((i % cols) * cell, Math.floor(i / cols) * cell, cell, cell);
+      renderVisible();
+    }
+
+    function renderVisible() {
+      if (!digits.length) return;
+      const scrollOffset = Math.max(0, window.scrollY);
+      const firstRow = Math.floor(scrollOffset / cell);
+      const visibleRows = Math.ceil(canvas.height / cell);
+
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (let r = 0; r < visibleRows; r++) {
+        const row = firstRow + r;
+        if (row >= totalRows()) break;
+        for (let c = 0; c < cols; c++) {
+          const idx = row * cols + c;
+          if (idx >= digits.length) break;
+          ctx.fillStyle = COLORS[+digits[idx]];
+          ctx.fillRect(c * cell, r * cell, cell, cell);
+        }
       }
     }
+
+    let rafId = 0;
+    function scheduleRender() {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(renderVisible);
+    }
+
+    window.addEventListener('scroll', scheduleRender, { passive: true });
+    window.addEventListener('resize', () => { updateSliderRanges(); updateLayout(); });
 
     // Fetch digits
     subtitle.textContent = 'Loading digits...';
@@ -159,25 +208,39 @@
       .then(text => {
         digits = text.replace(/[^0-9]/g, '');
         subtitle.textContent = `${digits.length.toLocaleString()} digits visualized as colored squares`;
-        render();
+        updateSliderRanges();
+        updateLayout();
       })
       .catch(err => { subtitle.textContent = `Failed to load digits: ${err.message}`; });
 
     // Sliders
     const slider = document.getElementById('size-slider');
     const sizeLabel = document.getElementById('size-label');
+    const colsSlider = document.getElementById('cols-slider');
+    const colsLabel = document.getElementById('cols-label');
+
+    function updateSliderRanges() {
+      const maxCols = Math.max(5, Math.floor(window.innerWidth / cell));
+      colsSlider.max = maxCols;
+      if (cols > maxCols) { cols = maxCols; colsSlider.value = cols; colsLabel.textContent = cols; }
+
+      const maxCell = Math.max(1, Math.floor(window.innerWidth / cols));
+      slider.max = maxCell;
+      if (cell > maxCell) { cell = maxCell; slider.value = cell; sizeLabel.textContent = `${cell}px`; }
+    }
+
     slider.addEventListener('input', (e) => {
       cell = +e.target.value;
       sizeLabel.textContent = `${cell}px`;
-      render();
+      updateSliderRanges();
+      updateLayout();
     });
 
-    const colsSlider = document.getElementById('cols-slider');
-    const colsLabel = document.getElementById('cols-label');
     colsSlider.addEventListener('input', (e) => {
       cols = +e.target.value;
       colsLabel.textContent = cols;
-      render();
+      updateSliderRanges();
+      updateLayout();
     });
 
     // Hover tooltip
@@ -187,7 +250,12 @@
       const scaleY = canvas.height / rect.height;
       const cx = Math.floor((e.clientX - rect.left) * scaleX / cell);
       const cy = Math.floor((e.clientY - rect.top) * scaleY / cell);
-      const idx = cy * cols + cx;
+
+      const scrollOffset = Math.max(0, window.scrollY);
+      const firstRow = Math.floor(scrollOffset / cell);
+      const absRow = firstRow + cy;
+      const idx = absRow * cols + cx;
+
       if (idx >= 0 && idx < digits.length && cx >= 0 && cx < cols) {
         tooltip.textContent = `Position ${idx.toLocaleString()}: digit ${digits[idx]}`;
         tooltip.style.opacity = '1';
